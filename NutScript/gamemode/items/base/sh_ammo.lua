@@ -1,50 +1,31 @@
---[[
-List of ammo types:
-	AR2 - Ammunition of the AR2/Pulse Rifle
-	AlyxGun - (name in-game "5.7mm Ammo")
-	Pistol - Ammunition of the 9MM Pistol 
-	SMG1 - Ammunition of the SMG/MP7
-	357 - Ammunition of the .357 Magnum
-	XBowBolt - Ammunition of the Crossbow
-	Buckshot - Ammunition of the Shotgun
-	RPG_Round - Ammunition of the RPG/Rocket Launcher
-	SMG1_Grenade - Ammunition for the SMG/MP7 grenade launcher (secondary fire)
-	SniperRound
-	SniperPenetratedRound - (name in-game ".45 Ammo")
-	Grenade - Note you must be given the grenade weapon (weapon_frag) before you can throw grenades.
-	Thumper - Ammunition cannot exceed 2 (name in-game "Explosive C4 Ammo")
-	Gravity - (name in-game "4.6MM Ammo")
-	Battery - (name in-game "9MM Ammo")
-	GaussEnergy 
-	CombineCannon - (name in-game ".50 Ammo")
-	AirboatGun - (name in-game "5.56MM Ammo")
-	StriderMinigun - (name in-game "7.62MM Ammo")
-	HelicopterGun
-	AR2AltFire - Ammunition of the AR2/Pulse Rifle 'combine ball' (secondary fire)
-	slam - Like Grenade, but for the Selectable Lightweight Attack Munition (S.L.A.M)
---]]
+ITEM.name = "Ammo Base"
+ITEM.model = "models/Items/BoxSRounds.mdl"
+ITEM.width = 1
+ITEM.height = 1
+ITEM.ammo = "pistol" // type of the ammo
+ITEM.ammoAmount = 30 // amount of the ammo
+ITEM.desc = "A Box that contains %s of Pistol Ammo"
+ITEM.category = "Ammunition"
 
-BASE.name = "Base Ammo"
-BASE.uniqueID = "base_ammo"
-BASE.category = "Ammunition"
-BASE.type = "ar2"
-BASE.amount = 30
-BASE.functions = {}
-BASE.functions.Use = {
-	run = function(itemTable, client, data)
-		if (SERVER) then
-			client:GiveAmmo(itemTable.amount, itemTable.type, true)
-			client:EmitSound("items/ammo_pickup.wav")
-		end
+function ITEM:getDesc()
+	return Format(self.desc, self.ammoAmount)
+end
+
+if (CLIENT) then
+	function ITEM:paintOver(item, w, h)
+		draw.SimpleText(item.ammoAmount, "DermaDefault", w - 3, h - 3, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_TOP, 1, color_black)
 	end
+end
+
+// On player uneqipped the item, Removes a weapon from the player and keep the ammo in the item.
+ITEM.functions.use = { -- sorry, for name order.
+	name = "Load",
+	tip = "useTip",
+	icon = "icon16/add.png",
+	onRun = function(item)
+		item.player:GiveAmmo(item.ammoAmount, item.ammo)
+		item.player:EmitSound("items/ammo_pickup.wav", 110)
+		
+		return true
+	end,
 }
-
---[[
-	Example:
-
-	ITEM.name = "9mm Bullets"
-	ITEM.uniqueID = "ammo_9mm"
-	ITEM.type = "pistol"
-	ITEM.amount = 20
-	ITEM.model = Model("models/items/boxsRounds.mdl")
---]]

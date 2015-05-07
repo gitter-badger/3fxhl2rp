@@ -2,60 +2,53 @@ AddCSLuaFile()
 
 ENT.Type = "anim"
 ENT.PrintName = "Money"
-ENT.Author = "Chessnut"
 ENT.Category = "NutScript"
+ENT.Spawnable = false
 
 if (SERVER) then
 	function ENT:Initialize()
-		self:SetModel(nut.config.moneyModel)
-		self:PhysicsInit(SOLID_VPHYSICS)
+		self:SetModel("models/props_lab/box01a.mdl")
 		self:SetSolid(SOLID_VPHYSICS)
-		self:SetMoveType(MOVETYPE_VPHYSICS)
-		self:SetUseType(SIMPLE_USE)
-		self:SetNetVar("amount", 0)
+		self:PhysicsInit(SOLID_VPHYSICS)
 
 		local physObj = self:GetPhysicsObject()
 
 		if (IsValid(physObj)) then
+			physObj:EnableMotion(true)
 			physObj:Wake()
+		else
+			local min, max = Vector(-8, -8, -8), Vector(8, 8, 8)
+
+			self:PhysicsInitBox(min, max)
+			self:SetCollisionBounds(min, max)
 		end
-
-		hook.Run("MoneyEntityCreated", self)
-	end
-
-	function ENT:SetMoney(amount)
-		if (amount <= 0) then
-			self:Remove()
-		end
-
-		self:SetNetVar("amount", amount)
 	end
 
 	function ENT:Use(activator)
-		local amount = self:GetNetVar("amount", 0)
-
-		if (amount > 0 and IsValid(activator) and activator.character and hook.Run("PlayerCanPickupMoney", activator, self) != false) then
-			if (self.owner == activator and self.charindex != activator.character.index) then
-				nut.util.Notify("You can't pick up your other character's money.", activator)
-
-				return
-			end
-
-			activator:GiveMoney(amount)
-			nut.util.Notify("You have picked up "..nut.currency.GetName(amount)..".", activator)
-
+		if (hook.Run("OnPickupMoney", activator, self) != false) then
 			self:Remove()
 		end
 	end
-
-	function ENT:StartTouch(entity)
-		if (entity:GetClass() == "nut_money") then
-			self:SetMoney(self:GetNetVar("amount", 0) + entity:GetNetVar("amount", 0))
-			entity:Remove()
-		end
-	end
 else
-	function ENT:DrawTargetID(x, y, alpha)
-		nut.util.DrawText(x, y, nut.currency.GetName(self:GetNetVar("amount", 0), true), Color(255, 255, 255, alpha))
+	ENT.DrawEntityInfo = true
+
+	local toScreen = FindMetaTable("Vector").ToScreen
+	local colorAlpha = ColorAlpha
+	local drawText = nut.util.drawText
+	local configGet = nut.config.get
+
+	function ENT:onDrawEntityInfo(alpha)
+		local position = toScreen(self.LocalToWorld(self, self.OBBCenter(self)))
+		local x, y = position.x, position.y
+
+		drawText(nut.currency.get(self.getAmount(self)), x, y, colorAlpha(configGet("color"), alpha), 1, 1, nil, alpha * 0.65)
 	end
+end
+
+function ENT:setAmount(amount)
+	self:setNetVar("amount", amount)
+end
+
+function ENT:getAmount(amount)
+	return self:getNetVar("amount", 0)
 end

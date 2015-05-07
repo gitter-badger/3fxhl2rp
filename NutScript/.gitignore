@@ -1,3 +1,1 @@
-gamemode/sh_translations.lua
-gamemode/sh_config.lua
-gamemode/sv_config.lua
+gamemode/config/sv_database.lua

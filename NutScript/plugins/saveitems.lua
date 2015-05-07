@@ -1,43 +1,58 @@
 PLUGIN.name = "Save Items"
-PLUGIN.desc = "Saves droped items in the world."
 PLUGIN.author = "Chessnut"
+PLUGIN.desc = "Saves items that were dropped."
 
-if (SERVER) then
-	function PLUGIN:LoadData()
-		local restored = nut.util.ReadTable("saveditems")
+function PLUGIN:ShouldCleanDataItems()
+	-- We will handle the cleansing of items ourselves.
+	return false
+end
 
-		if (restored) then
-			for k, v in pairs(restored) do
-				local position = v.position
-				local angles = v.angles
-				local itemTable = nut.item.Get(v.uniqueID)
-				local data = v.data
+function PLUGIN:LoadData()
+	local items = self:getData()
 
-				if itemTable then
-					local entity = nut.item.Spawn(position, angles, itemTable, data)
+	if (items) then
+		local idRange = {}
+		local positions = {}
 
-					hook.Run("ItemRestored", itemTable, entity)
+		for k, v in ipairs(items) do
+			idRange[#idRange + 1] = v[1]
+			positions[v[1]] = v[2]
+		end
+
+		if (#idRange > 0) then
+			local range = "("..table.concat(idRange, ", ")..")"
+
+			nut.db.query("SELECT _itemID, _uniqueID, _data FROM nut_items WHERE _itemID IN "..range, function(data)
+				if (data) then
+					for k, v in ipairs(data) do
+						local itemID = tonumber(v._itemID)
+						local data = util.JSONToTable(v._data or "[]")
+						local uniqueID = v._uniqueID
+						local itemTable = nut.item.list[uniqueID]
+						local position = positions[itemID]
+
+						if (itemTable and itemID) then
+							local position = positions[itemID]
+							local item = nut.item.new(uniqueID, itemID)
+							item.data = data or {}
+							item:spawn(position).nutItemID = itemID
+							item.invID = 0
+						end
+					end
 				end
-			end
+			end)
+		end
+	end
+end
+
+function PLUGIN:SaveData()
+	local items = {}
+
+	for k, v in ipairs(ents.FindByClass("nut_item")) do
+		if (v.nutItemID) then
+			items[#items + 1] = {v.nutItemID, v:GetPos()}
 		end
 	end
 
-	function PLUGIN:SaveData()
-		local data = {}
-
-		for k, v in pairs(ents.FindByClass("nut_item")) do
-			if (hook.Run("ItemShouldSave", v) != false) then
-				data[#data + 1] = {
-					position = v:GetPos(),
-					angles = v:GetAngles(),
-					uniqueID = v:GetItemTable().uniqueID,
-					data = v:GetData()
-				}
-
-				hook.Run("ItemSaved", v)
-			end
-		end
-
-		nut.util.WriteTable("saveditems", data)
-	end
+	self:setData(items)
 end

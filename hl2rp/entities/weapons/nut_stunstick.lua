@@ -8,12 +8,16 @@ if (CLIENT) then
 	SWEP.DrawCrosshair = false
 end
 
+SWEP.Category = "HL2 RP"
 SWEP.Author = "Chessnut"
 SWEP.Instructions = "Primary Fire: [RAISED] Strike\nALT + Primary Fire: [RAISED] Toggle stun\nSecondary Fire: Push/Knock"
 SWEP.Purpose = "Hitting things and knocking on doors."
 SWEP.Drop = false
 
 SWEP.HoldType = "melee"
+
+SWEP.Spawnable = true
+SWEP.AdminOnly = true
 
 SWEP.ViewModelFOV = 47
 SWEP.ViewModelFlip = false
@@ -56,13 +60,13 @@ function SWEP:Precache()
 end
 
 function SWEP:Initialize()
-	self:SetWeaponHoldType(self.HoldType)
+	self:SetHoldType(self.HoldType)
 end
 
 function SWEP:PrimaryAttack()	
 	self:SetNextPrimaryFire(CurTime() + self.Primary.Delay)
 
-	if (!self.Owner:WepRaised()) then
+	if (!self.Owner:isWepRaised()) then
 		return
 	end
 
@@ -81,21 +85,21 @@ function SWEP:PrimaryAttack()
 
 			local model = string.lower(self.Owner:GetModel())
 			
-			if (nut.anim.GetClass(model) == "metrocop") then
-				self.Owner:SetOverrideSeq(sequence)
+			if (nut.anim.getModelClass(model) == "metrocop") then
+				self.Owner:forceSequence(sequence, nil, nil, true)
 			end
 		end
 
 		return
 	end
 
-	self:EmitSound("weapons/stunstick/stunstick_swing"..math.random(1, 2)..".wav")
+	self:EmitSound("weapons/stunstick/stunstick_swing"..math.random(1, 2)..".wav", 70)
 	self:SendWeaponAnim(ACT_VM_HITCENTER)
 
 	local damage = self.Primary.Damage
 
 	if (self:GetActivated()) then
-		damage = damage + 15
+		damage = 5
 	end
 
 	self.Owner:SetAnimation(PLAYER_ATTACK1)
@@ -125,16 +129,18 @@ function SWEP:PrimaryAttack()
 		if (IsValid(entity)) then
 			if (entity:IsPlayer()) then
 				if (self:GetActivated()) then
-					entity:ScreenFadeOut(15, color_white)
-				else
-					entity:ScreenFadeOut(1, Color(128, 0, 0, 200))
+					entity.nutStuns = (entity.nutStuns or 0) + 1
+
+					timer.Simple(10, function()
+						entity.nutStuns = math.max(entity.nutStuns - 1, 0)
+					end)
 				end
 
 				entity:ViewPunch(Angle(-20, math.random(-15, 15), math.random(-10, 10)))
 
-				if (self:GetActivated() and entity:Health() - damage <= 0) then
-					entity:SetTimedRagdoll(60, true)
-					entity:SetHealth(50)
+				if (self:GetActivated() and entity.nutStuns > (hook.Run("PlayerGetStunThreshold", entity, self.Owner) or 3)) then
+					entity:setRagdolled(true, 60)
+					entity.nutStuns = 0
 
 					return
 				end
@@ -142,7 +148,7 @@ function SWEP:PrimaryAttack()
 				if (self:GetActivated()) then
 					damage = 2
 				else
-					damage = 20
+					damage = 10
 				end
 			end
 
@@ -162,6 +168,12 @@ function SWEP:OnLowered()
 	self:SetActivated(false)
 end
 
+function SWEP:Holster(nextWep)
+	self:OnLowered()
+
+	return true
+end
+
 function SWEP:SecondaryAttack()
 	self.Owner:LagCompensation(true)
 		local data = {}
@@ -177,19 +189,19 @@ function SWEP:SecondaryAttack()
 	if (SERVER and IsValid(entity)) then
 		local pushed
 
-		if (entity:IsDoor()) then
-			if (nut.schema.Call("PlayerCanKnock", self.Owner, entity) == false) then
+		if (entity:isDoor()) then
+			if (hook.Run("PlayerCanKnock", self.Owner, entity) == false) then
 				return
 			end
 
-			self.Owner:ViewPunch( Angle(-1.3, 1.8, 0) )
+			self.Owner:ViewPunch(Angle(-1.3, 1.8, 0))
 			self.Owner:EmitSound("physics/plastic/plastic_box_impact_hard"..math.random(1, 4)..".wav")	
 			self.Owner:SetAnimation(PLAYER_ATTACK1)
 
 			self:SetNextSecondaryFire(CurTime() + 0.4)
 			self:SetNextPrimaryFire(CurTime() + 1)
 		elseif (entity:IsPlayer()) then
-			local direction = self.Owner:GetAimVector() * (300 + (self.Owner:GetAttrib(ATTRIB_STR, 0) * 3))
+			local direction = self.Owner:GetAimVector() * (300 + (self.Owner:getChar():getAttrib("str", 0) * 3))
 			direction.z = 0
 
 			entity:SetVelocity(direction)
@@ -211,15 +223,10 @@ function SWEP:SecondaryAttack()
 			self.Owner:EmitSound("weapons/crossbow/hitbod"..math.random(1, 2)..".wav")
 
 			local model = string.lower(self.Owner:GetModel())
+			local owner = self.Owner
 
-			if (nut.anim.GetClass(model) == "metrocop") then
-				self.Owner:SetOverrideSeq("pushplayer", nil, function()
-					self.Owner:Freeze(true)
-				end, function()
-					if (IsValid(self)) then
-						self.Owner:Freeze(false)
-					end
-				end)
+			if (nut.anim.getModelClass(model) == "metrocop") then
+				self.Owner:forceSequence("pushplayer")
 			end
 		end
 	end
@@ -255,7 +262,7 @@ end
 local NUM_BEAM_ATTACHEMENTS = 9
 local BEAM_ATTACH_CORE_NAME	= "sparkrear"
 
-function SWEP:ViewModelDrawn()
+function SWEP:PostDrawViewModel()
 	if (!self:GetActivated()) then
 		return
 	end
@@ -268,7 +275,7 @@ function SWEP:ViewModelDrawn()
 
 	cam.Start3D(EyePos(), EyeAngles())
 		local size = math.Rand(3.0, 4.0)
-		local color = Color(255, 255, 255, 100 + math.sin(RealTime() * 2)*20)
+		local color = Color(255, 255, 255, 50 + math.sin(RealTime() * 2)*20)
 
 		STUNSTICK_GLOW_MATERIAL_NOZ:SetFloat("$alpha", color.a / 255)
 

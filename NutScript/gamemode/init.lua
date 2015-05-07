@@ -1,47 +1,37 @@
---[[
-	Purpose: The framework needs to define this so the schemas can reference
-	the framework without GM.BaseClass since it the baseclass is not defined in time.
---]]
-
+-- Include NutScript content.
 resource.AddWorkshop("207739713")
 
-local startTime = SysTime()
+-- Include features from the Sandbox gamemode.
+DeriveGamemode("sandbox")
+-- Define a global shared table to store NutScript information.
+nut = nut or {util = {}, meta = {}}
 
-if (string.lower(GetConVarString("gamemode")) == "nutscript") then
-	MsgC(Color(255, 0, 0), "FATAL WARNING! CHANGE +GAMEMODE TO YOUR SCHEMA, NOT NUTSCRIPT!\n")
-
-	local _, gamemodes = file.Find("gamemodes/*", "GAME")
-
-	for k, v in pairs(gamemodes) do
-		local files = file.Find("gamemodes/"..v.."/*.txt", "GAME")
-
-		for k2, v2 in pairs(files) do
-			local contents = string.lower(file.Read("gamemodes/"..v.."/"..v2, "GAME"))
-
-			if (string.find(string.lower(contents), [["base"(%s+)"nutscript"]])) then
-				MsgC(Color(255, 255, 0), "FOUND SCHEMA '"..v.."'\n")
-				game.ConsoleCommand("gamemode "..v.."\n")
-				game.ConsoleCommand("bot\n")
-
-				hook.Add("Think", "nut_ChangeLevel", function()
-					MsgC(Color(255, 255, 0), "CHANGING MAP TO INITIALIZE THE '"..v.."' SCHEMA...\n")
-					game.ConsoleCommand("changelevel "..game.GetMap().."\n")
-				end)
-			end
-		end
-	end
-
-	return
-end
-
--- Define this so the SCHEMA knows what the baseclass is, since self.BaseClass isn't
--- set in time.
-nut = nut or GM
-
--- Needed includes.
-include("shared.lua")
-
+-- Send the following files to players.
 AddCSLuaFile("cl_init.lua")
+AddCSLuaFile("core/sh_util.lua")
 AddCSLuaFile("shared.lua")
 
-MsgN("NutScript took "..math.Round(SysTime() - startTime, 3).. " second(s) to initialize.")
+-- Include utility functions, data storage functions, and then shared.lua
+include("core/sh_util.lua")
+include("core/sv_data.lua")
+include("shared.lua")
+
+-- Connect to the database using SQLite, mysqloo, or tmysql4.
+nut.db.connect(function()
+	-- Create the SQL tables if they do not exist.
+	nut.db.loadTables()
+	nut.log.loadTables()
+	
+	MsgC(Color(0, 255, 0), "NutScript has connected to the database.\n")
+end)
+
+-- Resources that are required for players to download are here.
+resource.AddFile("materials/nutscript/gui/vignette.png")
+resource.AddFile("resource/fonts/fontello.ttf")
+
+concommand.Add("nut_setowner", function(client, command, arguments)
+    if (!IsValid(client)) then
+        MsgC(Color(255, 0, 0), "** 'nut_setowner' has been deprecated in NutScript 1.1\n")
+        MsgC(Color(255, 0, 0), "** Instead, please install an admin mod and use that instead.\n")
+    end
+end)

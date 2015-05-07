@@ -23,7 +23,7 @@ function ENT:SpawnFunction(client, trace)
 	entity:Activate()
 
 	for k, v in pairs(ents.FindInBox(entity:LocalToWorld(entity:OBBMins()), entity:LocalToWorld(entity:OBBMaxs()))) do
-		if (string.find(v:GetClass(), "prop") and v:GetModel() == "models/props_interiors/vendingmachinesoda01a.mdl") then
+		if (v:GetClass() != "nut_vendingm" and v:GetModel() == "models/props_interiors/vendingmachinesoda01a.mdl") then
 			entity:SetPos(v:GetPos())
 			entity:SetAngles(v:GetAngles())
 			SafeRemoveEntity(v)
@@ -32,10 +32,12 @@ function ENT:SpawnFunction(client, trace)
 		end
 	end
 
+	SCHEMA:saveVendingMachines()
+
 	return entity
 end
 
-function ENT:GetNearestButton(client)
+function ENT:getNearestButton(client)
 	client = client or (CLIENT and LocalPlayer())
 
 	if (self.buttons) then
@@ -81,8 +83,8 @@ if (SERVER) then
 		self:SetSolid(SOLID_VPHYSICS)
 		self:SetUseType(SIMPLE_USE)
 
-		self:SetNetVar("stocks", {10, 5, 5})
-		self:SetNetVar("active", true)
+		self:setNetVar("stocks", {10, 5, 5})
+		self:setNetVar("active", true)
 
 		local physObj = self:GetPhysicsObject()
 
@@ -92,7 +94,7 @@ if (SERVER) then
 		end
 
 		for k, v in pairs(ents.FindInBox(self:LocalToWorld(self:OBBMins()), self:LocalToWorld(self:OBBMaxs()))) do
-			if (string.find(v:GetClass(), "prop") and v:GetModel() == "models/props_interiors/vendingmachinesoda01a.mdl") then
+			if (v:GetClass() != "nut_vendingm" and v:GetModel() == "models/props_interiors/vendingmachinesoda01a.mdl") then
 				self:SetPos(v:GetPos())
 				self:SetAngles(v:GetAngles())
 				SafeRemoveEntity(v)
@@ -111,41 +113,41 @@ if (SERVER) then
 			return
 		end
 
-		local button = self:GetNearestButton(activator)
-		local stocks = self:GetNetVar("stocks")
+		local button = self:getNearestButton(activator)
+		local stocks = self:getNetVar("stocks")
 
-		if (activator:IsCombine()) then
+		if (activator:isCombine()) then
 			if (activator:KeyDown(IN_SPEED) and button and stocks[button]) then
 				if (stocks[button] > 0) then
-					return activator:SendOverlayText("NO REFILL IS REQUIRED FOR THIS MACHINE.")
+					return activator:addDisplay("NO REFILL IS REQUIRED FOR THIS MACHINE.")
 				end
 
 				self:EmitSound("buttons/button5.wav")
 
-				if (!activator:HasMoney(25)) then
-					return activator:SendOverlayText("INSUFFICIENT FUNDS (25 TOKENS) TO REFILL MACHINE.")
+				if (!activator:getChar():hasMoney(25)) then
+					return activator:addDisplay("INSUFFICIENT FUNDS (25 TOKENS) TO REFILL MACHINE.")
 				else
-					activator:SendOverlayText("25 TOKENS HAVE BEEN TAKEN TO REFILL MACHINE.")
-					activator:TakeMoney(25)
+					activator:addDisplay("25 TOKENS HAVE BEEN TAKEN TO REFILL MACHINE.")
+					activator:getChar():takeMoney(25)
 				end
 
 				timer.Simple(1, function()
 					if (!IsValid(self)) then return end
 
 					stocks[button] = button == 1 and 10 or 5
-					self:SetNetVar("stocks", stocks)
+					self:setNetVar("stocks", stocks)
 				end)
 
 				return
 			else
-				self:SetNetVar("active", !self:GetNetVar("active"))
-				self:EmitSound(self:GetNetVar("active") and "buttons/combine_button1.wav" or "buttons/combine_button2.wav")
+				self:setNetVar("active", !self:getNetVar("active"))
+				self:EmitSound(self:getNetVar("active") and "buttons/combine_button1.wav" or "buttons/combine_button2.wav")
 
 				return
 			end
 		end
 
-		if (self:GetNetVar("active") == false) then
+		if (self:getNetVar("active") == false) then
 			return
 		end
 
@@ -161,29 +163,35 @@ if (SERVER) then
 				price = price + 15
 			end
 
-			if (!activator:HasMoney(price)) then
+			if (!activator:getChar():hasMoney(price)) then
 				self:EmitSound("buttons/button2.wav")
-				return nut.util.Notify("You need "..nut.currency.GetName(price).." to purchase this selection.", activator)
+
+				return activator:notify("You need "..nut.currency.get(price).." to purchase this selection.")
 			end
 
 			local position = self:GetPos()
 			local f, r, u = self:GetForward(), self:GetRight(), self:GetUp()
-			local itemPosition = position + f*19 + r*4 + u*-26
-			local entity = nut.item.Spawn(itemPosition, nil, item)
 
-			if (IsValid(entity)) then
+			nut.item.spawn(item, position + f*19 + r*4 + u*-26, function(item, entity)
 				stocks[button] = stocks[button] - 1
 
 				if (stocks[button] < 1) then
 					self:EmitSound("buttons/button6.wav")
 				end
 
-				self:SetNetVar("stocks", stocks)
+				self:setNetVar("stocks", stocks)
 				self:EmitSound("buttons/button4.wav", Angle(0, 0, 90))
 
-				activator:TakeMoney(price)
-				nut.util.Notify("You have spent "..nut.currency.GetName(price).." on this vending machine.", activator)
-			end
+				activator:getChar():takeMoney(price)
+				activator:getChar():takeMoney(price)
+				activator:notify("You have spent "..nut.currency.get(price).." on this vending machine.")
+			end)
+		end
+	end
+
+	function ENT:OnRemove()
+		if (!nut.shuttingDown) then
+			SCHEMA:saveVendingMachines()
 		end
 	end
 else
@@ -231,13 +239,13 @@ else
 			self.buttons[2] = position + f*18 + r*-24.4 + u*3.35
 			self.buttons[3] = position + f*18 + r*-24.4 + u*1.35
 
-			local closest = self:GetNearestButton()
-			local stocks = self:GetNetVar("stocks")
+			local closest = self:getNearestButton()
+			local stocks = self:getNetVar("stocks")
 
 			for k, v in pairs(self.buttons) do
 				local color = color_green
 
-				if (self:GetNetVar("active") != false) then
+				if (self:getNetVar("active")) then
 					if (stocks and stocks[k] and stocks[k] < 1) then
 						color = color_red
 						color.a = 200

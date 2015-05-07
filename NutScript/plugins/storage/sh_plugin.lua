@@ -1,343 +1,211 @@
-local PLUGIN = PLUGIN
 PLUGIN.name = "Storage"
-PLUGIN.author = "Chessnut and rebel1324"
--- Black Tea added few lines.
-PLUGIN.desc = "Adds storage items that can store items."
+PLUGIN.author = "Chessnut"
+PLUGIN.desc = "Provides the ability to store items."
 
-nut.lang.Add("lock_success", "Successfully Locked the Container.")
-nut.lang.Add("lock_locked", "The container is already locked.")
-nut.lang.Add("lock_wrong", "You've entered wrong password.")
-nut.lang.Add("lock_try", "The container is locked.")
-nut.lang.Add("lock_locked", "The container is locked.")
-nut.lang.Add("lock_itsworld", "World Container is cannot be locked.")
-nut.lang.Add("lock_unlocked", "Unlocked the container.")
+PLUGIN.definitions = PLUGIN.definitions or {}
 
-nut.lang.Add("ui_passwordlock", "Password Lock")
-nut.lang.Add("ui_enterpassword", "Enter the password for the container")
-nut.lang.Add("ui_locktype", "Which lock you want to use?")
-nut.lang.Add("ui_padlock", "Classic Padlock")
-nut.lang.Add("ui_digilock", "Digital Password Lock")
-nut.lang.Add("lock_noitem", "Not enough item for the action.")
+nut.util.include("sh_definitions.lua")
 
-nut.util.Include("cl_storage.lua")
-
-if (SERVER) then
-	local PLUGIN = PLUGIN
-
-	function PLUGIN:SaveData()
-		local data = {}
-
-		for k, v in pairs(ents.FindByClass("nut_container")) do
-			if v.generated then continue end
-			if (v.itemID) then
-				local inventory = v:GetNetVar("inv")
-
-				data[#data + 1] = {
-					position = v:GetPos(),
-					angles = v:GetAngles(),
-					inv = inventory,
-					world = v.world,
-					lock = v.lock,
-					classic = v.classic,
-					uniqueID = v.itemID,
-					type = v.type
-				}
-			end
-		end
-
-		self:WriteTable(data)
+for k, v in pairs(PLUGIN.definitions) do
+	if (v.name and v.width and v.height) then
+		nut.item.registerInv("st"..v.name, v.width, v.height)
+	else
+		ErrorNoHalt("[NutScript] Storage for '"..k.."' is missing all inventory information!\n")
+		PLUGIN.definitions[k] = nil
 	end
-
-	timer.Create("nut_SaveContainers", 600, 0, function()
-		PLUGIN:SaveData()
-	end)
-
-	function PLUGIN:LoadData()
-		local storage = self:ReadTable()
-
-		if (storage) then
-			for k, v in pairs(storage) do
-				local inventory = v.inv
-				local position = v.position
-				local angles = v.angles
-				local itemTable = nut.item.Get(v.uniqueID)
-				
-				local amt = 0
-				for _, __ in pairs( inventory ) do
-					amt = amt + 1
-				end
-
-				if ( amt == 0 && !v.world && !v.lock ) then continue end
-
-				if (itemTable) then
-					local entity = ents.Create("nut_container")
-					entity:SetPos(position)
-					entity:SetAngles(angles)
-					entity:Spawn()
-					entity:Activate()
-					entity:SetNetVar("inv", inventory)
-					entity:SetNetVar("name", itemTable.name)
-
-					local weight, max = entity:GetInvWeight()
-					entity:SetNetVar("weight", math.ceil((weight / max) * 100))
-					
-					entity.itemID = v.uniqueID
-					entity.lock = v.lock
-					entity.classic = v.classic
-					if entity.lock then
-						entity:SetNetVar( "locked", true )
-					end
-					entity.world = v.world
-					entity.type = v.type
-					entity:SetModel(itemTable.model)
-					entity:PhysicsInit(SOLID_VPHYSICS)
-					if (itemTable.maxWeight) then
-						entity:SetNetVar("max", itemTable.maxWeight)
-					end
-					if v.world then
-						local phys = entity:GetPhysicsObject()
-						if phys and phys:IsValid() then
-							phys:EnableMotion(false)
-						end
-					end
-				end
-			end
-		end
-	end
-else
-	
-	local locks = {
-		"classic_locker_1",
-		"digital_locker_1",
-	}
-	
-	local function lck1(entity)
-		if (!LocalPlayer():HasItem("classic_locker_1")) then 
-			nut.util.Notify(nut.lang.Get("lock_noitem"), client)
-
-			return false
-		end
-
-		netstream.Start("nut_RequestLock", {entity, true, ""})
-	end
-	
-	local function lck2(entity)
-		if (!LocalPlayer():HasItem("digital_locker_1")) then
-			nut.util.Notify("Lack of required item." , client)
-
-			return false
-		end
-
-		Derma_StringRequest( nut.lang.Get("ui_passwordlock"), nut.lang.Get("ui_enterpassword"), "", function( pas ) 
-			netstream.Start("nut_RequestLock", {entity, false, pas})
-		end)
-	end
-	
-	local storfuncs = {
-		/*
-		aopen = {
-			icon = "icon16/star.png",
-			name = "Admin Open",
-			tip = "Open the container.",
-			cond = function(entity)
-				return LocalPlayer():IsAdmin()
-			end,
-			func = function(entity)
-				netstream.Start("nut_Storage", entity)
-			end,
-		},
-		*/
-
-		open = {
-			name = "Open",
-			tip = "Open the container.",
-			cond = function(entity)
-				return true
-			end,
-			func = function(entity)
-				netstream.Start("nut_RequestStorageMenu", entity)
-			end,
-		},
-
-		pick = {
-			name = "Force Unlock",
-			cond = function(entity)
-				return false
-			end,
-			func = function(entity)
-			end,
-		},
-
-		lock = {
-			icon = "icon16/key.png",
-			name = "Lock",
-			cond = function(entity)
-				for _, item in pairs( locks ) do
-					if LocalPlayer():HasItem( item ) then
-						return !entity:GetNetVar( "locked" )
-					end
-				end
-				return false
-			end,
-			func = function(entity)
-				Derma_Query( nut.lang.Get("ui_locktype"), "Confirmation", nut.lang.Get("ui_padlock"), function() lck1(entity) end, nut.lang.Get("ui_digilock"), function() lck2(entity) end, "Cancel", function() end )
-			end,
-		},
-	}
-	
-	function PLUGIN:ShowStorageMenu( entity )
-		if (!IsValid(entity) or !IsValid(LocalPlayer():GetEyeTrace().Entity) or LocalPlayer():GetEyeTrace().Entity != entity) then
-			return
-		end
-
-		local menu = DermaMenu()
-			for k, v in SortedPairs( storfuncs ) do
-				
-				if v.cond and !v.cond( entity ) then continue end
-				
-				local material = v.icon or "icon16/briefcase.png"
-
-				local option = menu:AddOption(v.name or k, function()
-					if (v.func) then
-						if v.func then
-							v.func( entity )
-						end
-					end
-				end)
-				option:SetImage(material)
-
-				if (v.tip) then
-					option:SetToolTip(v.tip)
-				end
-				
-			end
-			
-		menu:Open()
-		menu:Center()
-	end
-
-	netstream.Hook("nut_ShowStorageMenu", function(entity)
-		PLUGIN:ShowStorageMenu(entity)
-	end)
-		
-	netstream.Hook("nut_RequestPassword", function(entity)
-		Derma_StringRequest( nut.lang.Get("ui_passwordlock"), nut.lang.Get("ui_enterpassword"), "", function(str) 
-			entity.lock = str // Storing correct password in client. You can't send malicious net-message to the server without setting the password via this menu.
-
-			netstream.Start("nut_VerifyPassword", {entity, str})
-		end)
-	end)
-		
 end
 
+if (SERVER) then
+	function PLUGIN:PlayerSpawnedProp(client, model, entity)
+		local data = self.definitions[model:lower()]
 
-nut.command.Register({
-	adminOnly = true,
-	syntax = "[bool isWorldContainer]",
-	onRun = function(client, arguments)
+		if (data) then
+			local storage = ents.Create("nut_storage")
+			storage:SetPos(entity:GetPos())
+			storage:SetAngles(entity:GetAngles())
+			storage:Spawn()
+			storage:SetModel(model)
+			storage:SetSolid(SOLID_VPHYSICS)
+			storage:PhysicsInit(SOLID_VPHYSICS)
 
-		local dat = {}
-		dat.start = client:GetShootPos()
-		dat.endpos = dat.start + client:GetAimVector() * 96
-		dat.filter = client
-		local trace = util.TraceLine(dat)
-		local entity = trace.Entity
-		
-		if (entity and entity:IsValid()) then
-			if (entity:GetClass() == "nut_container") then
-				if (arguments[1]) then
-					if (arguments[1] == "true" or arguments[1] == "false") then
-						if (arguments[1] == "true") then
-							entity.world = true
-						else
-							entity.world = false
-						end
-					else
-						nut.util.Notify("Must enter valid argument. (true or false)", client)	
-						return
+			nut.item.newInv(0, "st"..data.name, function(inventory)
+				storage:setInventory(inventory)
+
+				function inventory:onCanTransfer(client, oldX, oldY, x, y, newInvID)
+					return hook.Run("StorageCanTransfer", inventory, client, oldX, oldY, x, y, newInvID)
+				end
+			end)
+
+			self:saveStorage()
+			entity:Remove()
+		end
+	end
+
+	function PLUGIN:saveStorage()
+		local data = {}
+
+		for k, v in ipairs(ents.FindByClass("nut_storage")) do
+			if (v:getInv()) then
+				data[#data + 1] = {v:GetPos(), v:GetAngles(), v:getNetVar("id"), v:GetModel(), v.password}
+			end
+		end
+
+		self:setData(data)
+	end
+
+	function PLUGIN:SaveData()
+		self:saveStorage()
+	end
+
+	function PLUGIN:StorageItemRemoved(entity, inventory)
+		self:saveStorage()
+	end
+
+	function PLUGIN:StorageCanTransfer(inventory, client, oldX, oldY, x, y, newInvID)
+		local inventory2 = nut.item.inventories[newInvID]
+
+		print(inventory2)
+	end
+
+	function PLUGIN:LoadData()
+		local data = self:getData()
+
+		if (data) then
+			for k, v in ipairs(data) do
+				local data2 = self.definitions[v[4]:lower()]
+
+				if (data2) then
+					local storage = ents.Create("nut_storage")
+					storage:SetPos(v[1])
+					storage:SetAngles(v[2])
+					storage:Spawn()
+					storage:SetModel(v[4])
+					storage:SetSolid(SOLID_VPHYSICS)
+					storage:PhysicsInit(SOLID_VPHYSICS)
+					if (v[5]) then
+						storage.password = v[5]
+						storage:setNetVar("locked", true)
 					end
-				else
-					entity.world = !entity.world
+					
+					nut.item.restoreInv(v[3], data2.width, data2.height, function(inventory)
+						function inventory:onCanTransfer(client, oldX, oldY, x, y, newInvID)
+							return hook.Run("StorageCanTransfer", inventory, client, oldX, oldY, x, y, newInvID)
+						end
+
+						storage:setNetVar("id", v[3])
+					end)
+
+					local physObject = storage:GetPhysicsObject()
+					if (physObject) then
+						physObject:EnableMotion()
+					end
+				end
+			end
+		end
+	end
+
+	netstream.Hook("invExit", function(client)
+		local entity = client.nutBagEntity
+
+		if (IsValid(entity)) then
+			entity.receivers[client] = nil
+		end
+
+		client.nutBagEntity = nil
+	end)
+
+	netstream.Hook("invLock", function(client, entity, password)
+		local dist = entity:GetPos():Distance(client:GetPos())
+
+		if (dist < 128 and password) then
+			if (entity.password and entity.password == password) then
+				entity:OpenInv(client)
+			else
+				client:notifyLocalized("wrongPassword")
+			end
+		end
+	end)
+else
+	local PLUGIN = PLUGIN
+
+	netstream.Hook("invLock", function(entity)
+		Derma_StringRequest(
+			L("storPassWrite"),
+			L("storPassWrite"),
+			"",
+			function(val)
+				netstream.Start("invLock", entity, val)
+			end
+		)
+	end)
+
+	netstream.Hook("invOpen", function(entity, index)
+		local inventory = nut.item.inventories[index]
+
+		if (IsValid(entity) and inventory and inventory.slots) then
+			local data = PLUGIN.definitions[entity:GetModel():lower()]
+
+			if (data) then
+				nut.gui.inv1 = vgui.Create("nutInventory")
+				nut.gui.inv1:ShowCloseButton(true)
+
+				local inventory2 = LocalPlayer():getChar():getInv()
+
+				if (inventory2) then
+					nut.gui.inv1:setInventory(inventory2)
 				end
 
-				if entity.world then
-					nut.util.Notify("This container is now world container.", client)		
-				else
-					nut.util.Notify("This container is now user-created container.", client)		
-				end	
-			else
-				nut.util.Notify("You have to face a container to use this command!", client)			
-			end
-		else
-			nut.util.Notify("You have to face an entity to use this command!", client)
-		end
-		
-	end
-}, "setworldcontainer")
+				local panel = vgui.Create("nutInventory")
+				panel:ShowCloseButton(true)
+				panel:SetTitle(data.name)
+				panel:setInventory(inventory)
+				panel:MoveLeftOf(nut.gui.inv1, 4)
+				panel.OnClose = function(this)
+					if (IsValid(nut.gui.inv1) and !IsValid(nut.gui.menu)) then
+						nut.gui.inv1:Remove()
+					end
 
-
-nut.command.Register({
-	adminOnly = true,
-	syntax = "[string Password]",
-	onRun = function(client, arguments)
-
-		local dat = {}
-		dat.start = client:GetShootPos()
-		dat.endpos = dat.start + client:GetAimVector() * 96
-		dat.filter = client
-		local trace = util.TraceLine(dat)
-		local entity = trace.Entity
-		
-		if (entity and entity:IsValid()) then
-			if (entity:GetClass() == "nut_container") then
-				if (arguments[1]) then
-					entity.classic = false
-					entity.lock = arguments[1]
-					entity:SetNetVar( "locked", true )
-
-					nut.util.Notify("Lock Set: ".. entity.lock, client)		
-				else
-					entity.classic = nil
-					entity.lock = nil
-					entity:SetNetVar( "locked", false )
-
-					nut.util.Notify(nut.lang.Get("lock_unlocked"), client)		
+					netstream.Start("invExit")
 				end
-			else
-				nut.util.Notify("You have to face a container to use this command!", client)			
+
+				local oldClose = nut.gui.inv1.OnClose
+				nut.gui.inv1.OnClose = function()
+					if (IsValid(panel) and !IsValid(nut.gui.menu)) then
+						panel:Remove()
+					end
+
+					netstream.Start("invExit")
+					-- IDK Why. Just make it sure to not glitch out with other stuffs.
+					nut.gui.inv1.OnClose = oldClose
+				end
+
+				nut.gui["inv"..index] = panel
 			end
-		else
-			nut.util.Notify("You have to face an entity to use this command!", client)
 		end
-		
-	end
-}, "setcontainerlock")
+	end)
+end
 
-
-nut.command.Register({
+nut.command.add("storagelock", {
 	adminOnly = true,
-	syntax = "",
+	syntax = "[string password]",
 	onRun = function(client, arguments)
-		local dat = {}
-		dat.start = client:GetShootPos()
-		dat.endpos = dat.start + client:GetAimVector() * 96
-		dat.filter = client
-		local trace = util.TraceLine(dat)
-		local entity = trace.Entity
-		
-		if (entity and entity:IsValid()) then
-			if (entity:GetClass() == "nut_container") then
-				if entity.world then
-					nut.util.Notify("This container is world container.", client)		
-				else
-					nut.util.Notify("This container is user-created container.", client)		
-				end			
+		local trace = client:GetEyeTraceNoCursor()
+		local ent = trace.Entity
+
+		if (ent and ent:IsValid()) then
+			local password = table.concat(arguments, " ")
+
+			if (password != "") then
+				ent:setNetVar("locked", true)
+				ent.password = password
+				client:notifyLocalized("storPass", password)
 			else
-				nut.util.Notify("You have to face a container to use this command!", client)			
+				ent:setNetVar("locked", nil)
+				ent.password = nil
+				client:notifyLocalized("storPassRmv")
 			end
 		else
-			nut.util.Notify("You have to face an entity to use this command!", client)
+			client:notifyLocalized("invalid", "Entity")
 		end
-		
 	end
-}, "isworldcontainer")
+})

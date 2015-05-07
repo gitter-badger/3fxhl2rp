@@ -1,179 +1,320 @@
 PLUGIN.name = "Radio"
-PLUGIN.author = "Chessnut"
-PLUGIN.desc = "Adds usable radios for in-game communication."
+PLUGIN.author = "Black Tea"
+PLUGIN.desc = "You can communicate with other people in distance."
+local RADIO_CHATCOLOR = Color(100, 255, 50)
 
-if (CLIENT) then
-	surface.CreateFont("nut_ChatFontRadio", {
-		font = "Courier New",
-		size = 18,
-		weight = 800
-	})
+-- This is how initialize Language in Single File.
+local langkey = "english"
+local langTable = {
+	radioFreq = "Frequency",
+	radioSubmit = "Submit",
+	radioNoRadio = "You don't have any radio to adjust.",
+	radioNoRadioComm = "You don't have any radio to communicate",
+	radioFormat = "%s radios in \"%s\"",
+}
 
-	function PLUGIN:ShouldDrawTargetEntity(entity)
-		if (entity:GetClass() == "nut_radio") then
-			return true
-		end
-	end
-
-	function PLUGIN:DrawTargetID(entity, x, y, alpha)
-		if (entity:GetClass() == "nut_radio") then
-			local mainColor = nut.config.mainColor
-			local color = Color(mainColor.r, mainColor.g, mainColor.b, alpha)
-
-			nut.util.DrawText(x, y, "Radio", color)
-				y = y + nut.config.targetTall
-
-				local text = "No frequency has been set."
-				local frequency = entity:GetNetVar("freq")
-
-				if (frequency) then
-					text = "Frequency set to "..frequency.."."
-				end
-			nut.util.DrawText(x, y, text, Color(255, 255, 255, alpha))
-		end
-	end
-else
-	function PLUGIN:LoadData()
-		local restored = nut.util.ReadTable("radios")
-
-		if (restored) then
-			for k, v in pairs(restored) do
-				local position = v.position
-				local angles = v.angles
-				local frequency  = v.freq
-				local active = v.active
-
-				local entity = ents.Create("nut_radio")
-				entity:SetPos(position)
-				entity:SetAngles(angles)
-				entity:Spawn()
-				entity:Activate()
-				entity:SetNetVar("freq", frequency)
-				entity:SetNetVar("active", active)
-			end
-		end
-	end
-
-	function PLUGIN:SaveData()
-		local data = {}
-
-		for k, v in pairs(ents.FindByClass("nut_radio")) do
-			data[#data + 1] = {
-				position = v:GetPos(),
-				angles = v:GetAngles(),
-				freq = v:GetNetVar("freq"),
-				active = v:GetNetVar("active")
-			}
-		end
-
-		nut.util.WriteTable("radios", data)
-	end
+function PLUGIN:PluginLoaded()
+	table.Merge(nut.lang.stored[langkey], langTable)
 end
 
-nut.command.Register({
-	syntax = "<number freq>",
-	onRun = function(client, arguments)
-		local data = {}
-			data.start = client:GetShootPos()
-			data.endpos = data.start + client:GetAimVector() * 96
-			data.filter = client
-		local trace = util.TraceLine(data)
-		local entity = trace.Entity
-		local frequency = arguments[1] or ""
+if (CLIENT) then
+	local PANEL = {}
+	function PANEL:Init()
+		self.number = 0
+		self:SetWide(70)
 
-		if (!string.match(frequency, "%d%d%d%.%d")) then
-			nut.util.Notify("Frequencies must follow the ###.# format to be valid.", client)
-
-			return
+		local up = self:Add("DButton")
+		up:SetFont("Marlett")
+		up:SetText("t")
+		up:Dock(TOP)
+		up:DockMargin(2, 2, 2, 2)
+		up.DoClick = function(this)
+			self.number = (self.number + 1)% 10
+			surface.PlaySound("buttons/lightswitch2.wav")
 		end
 
-		if (IsValid(entity) and entity:GetClass() == "nut_radio") then
-			entity:SetNetVar("freq", frequency)
+		local down = self:Add("DButton")
+		down:SetFont("Marlett")
+		down:SetText("u")
+		down:Dock(BOTTOM)
+		down:DockMargin(2, 2, 2, 2)
+		down.DoClick = function(this)
+			self.number = (self.number - 1)% 10
+			surface.PlaySound("buttons/lightswitch2.wav")
+		end
 
-			nut.util.Notify("You have set this radio's frequency to "..frequency..".", client)
-		else
-			nut.util.Notify("You must be looking at a radio.", client)
+		local number = self:Add("Panel")
+		number:Dock(FILL)
+		number.Paint = function(this, w, h)
+			draw.SimpleText(self.number, "nutDialFont", w/2, h/2, color_white, 1, 1)
 		end
 	end
-}, "freq")
 
-nut.chat.Register("radio", {
-	onChat = function(speaker, text)
-		if (LocalPlayer() != speaker and speaker:GetPos():Distance(LocalPlayer():GetPos()) <= nut.config.chatRange) then
-			chat.AddText(Color(169, 207, 232), nut.schema.Call("GetPlayerName", speaker, "radio", text)..": "..text)
-		else
-			chat.AddText(Color(85, 161, 39), nut.schema.Call("GetPlayerName", speaker, "radio", text)..": "..text)
+	vgui.Register("nutRadioDial", PANEL, "DPanel")
+
+	PANEL = {}
+
+	function PANEL:Init()
+		self:SetTitle(L("radioFreq"))
+		self:SetSize(330, 220)
+		self:Center()
+		self:MakePopup()
+
+		self.submit = self:Add("DButton")
+		self.submit:Dock(BOTTOM)
+		self.submit:DockMargin(0, 5, 0, 0)
+		self.submit:SetTall(25)
+		self.submit:SetText(L("radioSubmit"))
+		self.submit.DoClick = function()
+			local str = ""
+			for i = 1, 5 do
+				if (i != 4) then
+					str = str .. tostring(self.dial[i].number or 0)
+				else
+					str = str .. "."
+				end
+			end
+			netstream.Start("radioAdjust", str, self.itemID)
+
+			self:Close()
 		end
-	end,
-	prefix = {"/radio", "/r"},
-	canHear = function(speaker, listener)
-		local position = listener:GetPos()
-		local chatRange = nut.config.chatRange
-		local entities = ents.FindByClass("nut_radio")
-		local radioItems = listener:GetItemsByClass("radio")
 
-		if (speaker:GetPos():Distance(position) <= chatRange) then
+		self.dial = {}
+		for i = 1, 5 do
+			if (i != 4) then
+				self.dial[i] = self:Add("nutRadioDial")
+				self.dial[i]:Dock(LEFT)
+				if (i != 3) then
+					self.dial[i]:DockMargin(0, 0, 5, 0)
+				end
+			else
+				local dot = self:Add("Panel")
+				dot:Dock(LEFT)
+				dot:SetWide(30)
+				dot.Paint = function(this, w, h)
+					draw.SimpleText(".", "nutDialFont", w/2, h - 10, color_white, 1, 4)
+				end
+			end
+		end
+	end
+
+	function PANEL:Think()
+		self:MoveToFront()
+	end
+
+	vgui.Register("nutRadioMenu", PANEL, "DFrame")
+
+	surface.CreateFont("nutDialFont", {
+		font = "Agency FB",
+		size = 100,
+		weight = 1000
+	})
+
+	surface.CreateFont("nutRadioFont", {
+		font = "Lucida Sans Typewriter",
+		size = math.max(ScreenScale(7), 17),
+		weight = 100
+	})
+
+	netstream.Hook("radioAdjust", function(freq, id)
+		local adjust = vgui.Create("nutRadioMenu")
+
+		if (id) then
+			adjust.itemID = id
+		end
+
+		if (freq) then
+			for i = 1, 5 do
+				if (i != 4) then
+					adjust.dial[i].number = tonumber(freq[i])
+				end
+			end
+		end
+	end)
+else
+	netstream.Hook("radioAdjust", function(client, freq, id)
+		local inv = (client:getChar() and client:getChar():getInv() or nil)
+
+		if (inv) then
+			local item
+
+			if (id) then
+				item = nut.item.instances[id]
+			else
+				item = inv:hasItem("radio")
+			end
+
+			local ent = item:getEntity()
+
+			if (item and (IsValid(ent) or item:getOwner() == client)) then
+				(ent or client):EmitSound("buttons/combine_button1.wav", 50, 170)
+				item:setData("freq", freq, player.GetAll(), false, true)
+			else
+				client:notifyLocalized("radioNoRadio")
+			end
+		end
+	end)
+
+	/* Do we need it?
+	nut.command.add("freq", {
+		syntax = "<string name> [string flags]",
+		onRun = function(client, arguments)
+			local inv = client:getChar():getInv()
+
+			if (inv) then
+				local detect = {
+					"radio",
+					"sradio",
+					"pager"
+				}
+
+				for k, v in ipairs(detect) do
+					item = inv:hasItem(v)
+				end
+
+				if (item) then
+
+
+					item:setData("freq", arguments[1], nil, nil, true)
+				else
+					client:notify("You do not have any radio to adjust.")
+				end
+			end
+		end
+	})
+*/
+end
+
+-- Yelling out loud.
+local find = {
+	["radio"] = false,
+	["sradio"] = true
+}
+local function endChatter(listener)
+	timer.Simple(1, function()
+		if (!listener:IsValid() or !listener:Alive() or hook.Run("ShouldRadioBeep", listener) == false) then
+			return false
+		end
+
+		listener:EmitSound("npc/metropolice/vo/off"..math.random(1, 3)..".wav", math.random(60, 70), math.random(80, 120))
+	end)
+end
+
+nut.chat.register("radio", {
+	format = "%s says in radio: \"%s\"",
+	font = "nutRadioFont",
+	onGetColor = function(speaker, text)
+		return RADIO_CHATCOLOR
+	end,
+	onCanHear = function(speaker, listener)
+		local dist = speaker:GetPos():Distance(listener:GetPos())
+		local speakRange = nut.config.get("chatRange", 280)
+		local listenerEnts = ents.FindInSphere(listener:GetPos(), speakRange)
+		local listenerInv = listener:getChar():getInv()
+		local freq
+
+		if (!CURFREQ or CURFREQ == "") then
+			return false
+		end
+
+		if (dist <= speakRange) then
 			return true
 		end
 
-		for k, v in pairs(speaker:GetItemsByClass("radio")) do
-			if (v.data and v.data.Freq and v.data.On and v.data.On == "on") then
-				for k2, v2 in pairs(radioItems) do
-					if (v2.data and v2.data.On == "on" and v2.data.Freq and v.data.Freq == v2.data.Freq) then
-						return true
+		if (listenerInv) then
+			for k, v in pairs(listenerInv:getItems()) do
+				if (freq) then
+					break
+				end
+
+				for id, far in pairs(find) do
+					if (v.uniqueID == id and v:getData("power", false) == true) then
+						if (CURFREQ == v:getData("freq", "000.0")) then
+							endChatter(listener)
+							
+							return true
+						end
+
+						break
 					end
 				end
+			end
+		end
 
-				for k2, v2 in pairs(entities) do
-					if (v2:GetNetVar("active") and v2:GetNetVar("freq", "") == v.data.Freq and v2:GetPos():Distance(position) <= chatRange) then
-						return true
+		if (!freq) then
+			for k, v in ipairs(listenerEnts) do
+				if (freq) then
+					break
+				end
+
+				if (v:GetClass() == "nut_item") then
+					local itemTable = v:getItemTable()
+
+					for id, far in pairs(find) do
+						if (far and itemTable.uniqueID == id and v:getData("power", false) == true) then
+							if (CURFREQ == v:getData("freq", "000.0")) then
+								endChatter(listener)
+
+								return true
+							end
+						end
 					end
 				end
 			end
 		end
 
-		local data = {}
-			data.start = speaker:GetShootPos()
-			data.endpos = data.start + speaker:GetAimVector() * 96
-			data.filter = speaker
-		local trace = util.TraceLine(data)
-		local entity = trace.Entity
+		return false
+	end,
+	onCanSay = function(speaker, text)
+		local schar = speaker:getChar()
+		local speakRange = nut.config.get("chatRange", 280)
+		local speakEnts = ents.FindInSphere(speaker:GetPos(), speakRange)
+		local speakerInv = schar:getInv()
+		local freq
 
-		if (IsValid(entity)) then
-			if (!entity:GetNetVar("active")) then
-				return false
-			end
+		if (speakerInv) then
+			for k, v in pairs(speakerInv:getItems()) do
+				if (freq) then
+					break
+				end
 
-			local frequency = entity:GetNetVar("freq", "")
+				for id, far in pairs(find) do
+					if (v.uniqueID == id and v:getData("power", false) == true) then
+						freq = v:getData("freq", "000.0")
 
-			for k, v in pairs(radioItems) do
-				if (v.data and v.data.On and v.data.On == "on" and v.data.Freq and v.data.Freq == frequency) then
-					return true
+						break
+					end
 				end
 			end
-		end 
-	end,
-	canSay = function(speaker)
-		local data = {}
-			data.start = speaker:GetShootPos()
-			data.endpos = data.start + speaker:GetAimVector() * 96
-			data.filter = speaker
-		local trace = util.TraceLine(data)
-		local entity = trace.Entity
+		end
 
-		if (IsValid(entity)) then
-			if (entity:GetNetVar("active")) then
-				return true
+		if (!freq) then
+			for k, v in ipairs(speakEnts) do
+				if (freq) then
+					break
+				end
+
+				if (v:GetClass() == "nut_item") then
+					local itemTable = v:getItemTable()
+
+					for id, far in pairs(find) do
+						if (far and itemTable.uniqueID == id and v:getData("power", false) == true) then
+							freq = v:getData("freq", "000.0")
+
+							break
+						end
+					end
+				end
 			end
 		end
 
-		for k, v in pairs(speaker:GetItemsByClass("radio")) do
-			if (v.data and v.data.On and v.data.On == "on") then
-				return true
-			end
+		if (freq) then
+			CURFREQ = freq
+			speaker:EmitSound("npc/metropolice/vo/on"..math.random(1, 2)..".wav", math.random(50, 60), math.random(80, 120))
+		else
+			speaker:notifyLocalized("radioNoRadioComm")
+			return false
 		end
-
-		nut.util.Notify("You need to be looking at or own a radio that is on.", speaker)
 	end,
-	font = "nut_ChatFontRadio"
+	prefix = {"/r", "/radio"},
 })

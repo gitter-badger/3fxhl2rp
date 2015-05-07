@@ -1,66 +1,112 @@
---[[
-	Purpose: Provides some utility functions that include core
-	gamemode files and prepares schemas.
---]]
+-- Define gamemode information.
+GM.Name = "NutScript 1.1"
+GM.Author = "Chessnut and Black Tea"
+GM.Website = "http://chessnut.info"
 
-local startTime = CurTime()
+-- Fix for client:SteamID64() returning nil when in single-player.
+do
+	local playerMeta = FindMetaTable("Player")
+	playerMeta.nutSteamID64 = playerMeta.nutSteamID64 or playerMeta.SteamID64
 
--- Allows us to use the spawn menu and toolgun.
-DeriveGamemode("sandbox")
+	-- Overwrite the normal SteamID64 method.
+	function playerMeta:SteamID64()
+		-- Return 0 if the SteamID64 could not be found.
+		return self:nutSteamID64() or 0
+	end
 
--- Gamemode variables.
-nut.Name = "NutScript"
-nut.Author = "Chessnut"
+	NutTranslateModel = NutTranslateModel or player_manager.TranslateToPlayerModelName
 
--- Include and send needed utility functions.
-include("sh_util.lua")
-AddCSLuaFile("sh_util.lua")
+	function player_manager.TranslateToPlayerModelName(model)
+		model = model:lower():gsub("\\", "/")
+		local result = NutTranslateModel(model)
 
--- More of a config, but a table of models for factions to use be default.
--- We use Model(modelName) because it also precaches them for us.
-FEMALE_MODELS = {
-	Model("models/humans/group01/female_01.mdl"),
-	Model("models/humans/group01/female_02.mdl"),
-	Model("models/humans/group01/female_03.mdl"),
-	Model("models/humans/group01/female_06.mdl"),
-	Model("models/humans/group01/female_07.mdl"),
-	Model("models/humans/group02/female_01.mdl"),
-	Model("models/humans/group02/female_03.mdl"),
-	Model("models/humans/group02/female_06.mdl"),
-	Model("models/humans/group01/female_04.mdl")
-}
+		if (result == "kleiner" and !model:find("kleiner")) then
+			local model2 = model:gsub("models/", "models/player/")
+			result = NutTranslateModel(model2)
 
--- Ditto, except they're men.
-MALE_MODELS = {
-	Model("models/humans/group01/male_01.mdl"),
-	Model("models/humans/group01/male_02.mdl"),
-	Model("models/humans/group01/male_04.mdl"),
-	Model("models/humans/group01/male_05.mdl"),
-	Model("models/humans/group01/male_06.mdl"),
-	Model("models/humans/group01/male_07.mdl"),
-	Model("models/humans/group01/male_08.mdl"),
-	Model("models/humans/group01/male_09.mdl"),
-	Model("models/humans/group02/male_01.mdl"),
-	Model("models/humans/group02/male_03.mdl"),
-	Model("models/humans/group02/male_05.mdl"),
-	Model("models/humans/group02/male_07.mdl"),
-	Model("models/humans/group02/male_09.mdl")
-}
+			if (result != "kleiner") then
+				return result
+			end
 
--- Include translations and configurations.
-nut.util.Include("sh_translations.lua")
-nut.util.Include("sh_config.lua")
+			model2 = model:gsub("models/humans", "models/player")
+			result = NutTranslateModel(model2)
 
--- Other core directories. The second argument is true since they're in the framework.
--- If they werne't, it'd try to include them from the schema!
-nut.util.IncludeDir("libs", true)
-nut.util.IncludeDir("core", true)
-nut.util.IncludeDir("derma", true)
+			if (result != "kleiner") then
+				return result
+			end
 
--- Include commands.
-nut.util.Include("sh_commands.lua")
+			model2 = model:gsub("models/zombie/", "models/player/zombie_")
+			result = NutTranslateModel(model2)
 
-NSFolderName = GM.FolderName
+			if (result != "kleiner") then
+				return result
+			end
+		end
+
+		return result
+	end
+end
+
+-- Include core framework files.
+nut.util.include("core/cl_skin.lua")
+nut.util.includeDir("core/libs/external")
+nut.util.include("core/sh_config.lua")
+nut.util.includeDir("core/libs")
+nut.util.includeDir("core/derma")
+nut.util.includeDir("core/hooks")
+
+-- Include language and default base items.
+nut.lang.loadFromDir("nutscript/gamemode/languages")
+nut.item.loadFromDir("nutscript/gamemode/items")
+
+-- Called after the gamemode has loaded.
+function GM:Initialize()
+	-- Load all of the NutScript plugins.
+	nut.plugin.initialize()
+	-- Restore the configurations from earlier if applicable.
+	nut.config.load()
+
+	if (SERVER and hook.Run("ShouldCleanDataItems") != false) then
+		nut.db.query("DELETE FROM nut_items WHERE _invID = 0")
+	end
+end
+
+-- Called when a file has been modified.
+function GM:OnReloaded()
+	-- Load all of the NutScript plugins.
+	nut.plugin.initialize()
+	-- Restore the configurations from earlier if applicable.
+	nut.config.load()
+
+	-- Reload the default fonts.
+	if (CLIENT) then
+		hook.Run("LoadFonts", nut.config.get("font"))
+
+		-- Reload the scoreboard.
+		if (IsValid(nut.gui.score)) then
+			nut.gui.score:Remove()
+		end
+	else
+		-- Auto-reload support for faction pay timers.
+		for index, faction in ipairs(nut.faction.indices) do
+			for k, v in ipairs(team.GetPlayers(index)) do
+				if (faction.pay and faction.pay > 0) then
+					timer.Adjust("nutSalary"..v:UniqueID(), faction.payTime or 300, 0, function()
+						local pay = hook.Run("GetSalaryAmount", v, faction) or faction.pay
+
+						v:getChar():giveMoney(pay)
+						v:notifyLocalized("salary", nut.currency.get(pay))
+					end)
+				else
+					timer.Remove("nutSalary"..v:UniqueID())
+				end
+			end
+		end
+	end
+end
+
+-- Include default NutScript chat commands.
+nut.util.include("core/sh_commands.lua")
 
 if (SERVER and game.IsDedicated()) then
 	concommand.Remove("gm_save")

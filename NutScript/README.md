@@ -1,23 +1,13 @@
-NutScript
-=========
-
 [![Join the chat at https://gitter.im/Chessnut/NutScript](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/Chessnut/NutScript?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-A free role-play framework for Garry's Mod. Please note that this version is under development and should only be used for developing a schema early, or assisting with development on the schema.
+## Introduction
+NutScript 1.1 is the re-working of the original NutScript framework to provide a better back-end. This should include more efficient code and overall benefits to the way the framework functioned and/or performed.
 
-#### Check out the official website @ http://nutscript.rocks/
+## Important Notes
+* A .sql file is not provided since the tables should be generated for you.
+* The style has changed to use lowerCamelCase (most of the time) so be aware of casing!
+* **This is NOT finished and ready for __public__ use. Changes could occur at any time.**
+* You can find more changes under changes.txt
 
-Installation
-=========
-
-Installation instructions can be found on the wiki. (https://github.com/Chessnut/NutScript/wiki)
-
-Pull Requests
-=========
-
-Pull requests are open to be accepted. Please make sure that they are tested and follow the coding style guidelines, which can be found here: http://goo.gl/2SXzzJ
-
-License
-=========
-
-This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported license. To get a brief understanding of what that means, visit this URL: https://tldrlegal.com/license/creative-commons-attribution-noncommercial-sharealike-(cc-nc-sa)
+## Documentation
+* Since the wiki was accidently wiped (my bad), I'll just use the wiki included with Git if it is suitable.

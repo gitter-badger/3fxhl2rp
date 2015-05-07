@@ -1,95 +1,83 @@
-PLUGIN.name = "Door System"
+--[[
+	NutScript is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
+
+	NutScript is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with NutScript.  If not, see <http://www.gnu.org/licenses/>.
+--]]
+
+PLUGIN.name = "Doors"
 PLUGIN.author = "Chessnut"
-PLUGIN.desc = "Provides ability to purchase doors and defining unownable doors."
+PLUGIN.desc = "A simple door system."
 
-nut.config.doorCost = 50
-nut.config.doorSellAmount = 25
+DOOR_OWNER = 3
+DOOR_TENANT = 2
+DOOR_GUEST = 1
+DOOR_NONE = 0
 
-if (SERVER) then
-	function PLUGIN:DoorSetUnownable(entity)
-		entity:SetNetVar("unownable", true)
-		self:SaveData()
-	end
+nut.util.include("sv_plugin.lua")
+nut.util.include("cl_plugin.lua")
+nut.util.include("sh_commands.lua")
 
-	function PLUGIN:LockDoor(entity)
-		if (entity.locked) then
-			return
+do
+	local entityMeta = FindMetaTable("Entity")
+
+	function entityMeta:checkDoorAccess(client, access)
+		if (!self:isDoor()) then
+			return false
 		end
 
-		entity:Fire("close")
-		entity:Fire("lock")
-		entity.locked = true
-	end
+		access = access or DOOR_GUEST
 
-	function PLUGIN:UnlockDoor(entity)
-		if (!entity.locked) then
-			return
+		local parent = self.nutParent
+
+		if (IsValid(parent)) then
+			print(parent)
+			return parent:checkDoorAccess(client, access)
 		end
 
-		entity:Fire("unlock")
-		entity.locked = false
+		if (hook.Run("CanPlayerAccessDoor", client, self, access)) then
+			return true
+		end
+
+		if (self.nutAccess and (self.nutAccess[client] or 0) >= access) then
+			return true
+		end
+
+		return false
 	end
 
-	function PLUGIN:DoorSetOwnable(entity)
-		entity:SetNetVar("unownable", nil)
-		self:SaveData()
-	end
-
-	function PLUGIN:DoorSetHidden(entity, hidden)
-		entity:SetNetVar("hidden", hidden)
-		self:SaveData()
-	end
-
-	function PLUGIN:LoadData()
-		self.data = self:ReadTable()
-
-		for k, v in pairs(self.data) do
-			local entity
-
-			if (v.position) then
-				entity = ents.FindInSphere(v.position, 10)[1]
-			elseif (v.index) then
-				for k2, v2 in pairs(ents.GetAll()) do
-					if (nut.util.GetCreationID(v2) == v.index) then
-						entity = v2
-
-						break
-					end
-				end
+	if (SERVER) then
+		function entityMeta:removeDoorAccessData()
+			for k, v in pairs(self.nutAccess or {}) do
+				netstream.Start(k, "doorMenu")
 			end
-
-			if (IsValid(entity)) then
-				entity:SetNetVar("title", v.title)
-				entity:SetNetVar("unownable", v.own)
-
-				if (v.hidden) then
-					entity:SetNetVar("hidden", true)
-				end
-			end
+			
+			self.nutAccess = {}
+			self:setNetVar("owner", nil)
 		end
-	end
-
-	function PLUGIN:SaveData()
-		local data = {}
-
-		for k, v in pairs(ents.GetAll()) do
-			if (IsValid(v)) then
-				local title = v:GetNetVar("title", "")
-
-				if (v:IsDoor() and (v:GetNetVar("unownable") or v:GetNetVar("hidden") or (title and title != "" and title != "Door for Sale"))) then
-					data[#data + 1] = {
-						index = nut.util.GetCreationID(v),
-						title = v:GetNetVar("title"),
-						own = v:GetNetVar("unownable"),
-						hidden = v:GetNetVar("hidden", false)
-					}
-				end
-			end
-		end
-
-		self:WriteTable(data)
 	end
 end
 
-nut.util.Include("sh_hooks.lua")
-nut.util.Include("sh_commands.lua")
+-- Configurations for door prices.
+nut.config.add("doorCost", 10, "The price to purchase a door.", nil, {
+	data = {min = 0, max = 500},
+	category = "dConfigName"
+})
+nut.config.add("doorSellRatio", 0.5, "How much of the door price is returned when selling a door.", nil, {
+	form = "Float",
+	data = {min = 0, max = 1.0},
+	category = "dConfigName"
+})
+nut.config.add("doorLockTime", 1, "How long it takes to (un)lock a door.", nil, {
+	form = "Float",
+	data = {min = 0, max = 10.0},
+	category = "dConfigName"
+})

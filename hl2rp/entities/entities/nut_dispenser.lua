@@ -34,6 +34,8 @@ function ENT:SpawnFunction(client, trace)
 	entity:Spawn()
 	entity:Activate()
 
+	SCHEMA:saveDispensers()
+
 	return entity
 end
 
@@ -96,11 +98,11 @@ if (CLIENT) then
 		cam.End3D2D()
 	end
 else
-	function ENT:SetUseAllowed(state)
+	function ENT:setUseAllowed(state)
 		self.canUse = state
 	end
 
-	function ENT:Error(text)
+	function ENT:error(text)
 		self:EmitSound("buttons/combine_button_locked.wav")
 		self:SetText(text)
 		self:SetDispColor(COLOR_RED)
@@ -113,13 +115,13 @@ else
 				timer.Simple(0.5, function()
 					if (!IsValid(self)) then return end
 
-					self:SetUseAllowed(true)
+					self:setUseAllowed(true)
 				end)
 			end
 		end)
 	end
 
-	function ENT:CreateRation()
+	function ENT:createRation()
 		local entity = ents.Create("prop_physics")
 		entity:SetAngles(self:GetAngles())
 		entity:SetModel("models/weapons/w_package.mdl")
@@ -132,36 +134,45 @@ else
 		timer.Simple(1.2, function()
 			if (IsValid(self) and IsValid(entity)) then
 				entity:Remove()
-				nut.item.Spawn(entity:GetPos(), entity:GetAngles(), "ration")
+				nut.item.spawn("ration", entity:GetPos(), nil, entity:GetAngles())
 			end
 		end)
 	end
 
-	function ENT:Dispense()
+	function ENT:dispense(amount)
+		if (amount < 1) then
+			return
+		end
+
+		self:setUseAllowed(false)
 		self:SetText("DISPENSING")
 		self:EmitSound("ambient/machines/combine_terminal_idle4.wav")
-		self:CreateRation()
+		self:createRation()
 		self.dummy:Fire("SetAnimation", "dispense_package", 0)
 
 		timer.Simple(3.5, function()
 			if (IsValid(self)) then
-				self:SetText("ARMING")
-				self:SetDispColor(COLOR_ORANGE)
-				self:EmitSound("buttons/combine_button7.wav")
+				if (amount > 1) then
+					self:dispense(amount - 1)
+				else
+					self:SetText("ARMING")
+					self:SetDispColor(COLOR_ORANGE)
+					self:EmitSound("buttons/combine_button7.wav")
 
-				timer.Simple(7, function()
-					if (!IsValid(self)) then return end
-
-					self:SetText("INSERT ID")
-					self:SetDispColor(COLOR_GREEN)
-					self:EmitSound("buttons/combine_button1.wav")
-
-					timer.Simple(0.75, function()
+					timer.Simple(7, function()
 						if (!IsValid(self)) then return end
 
-						self:SetUseAllowed(true)
+						self:SetText("INSERT ID")
+						self:SetDispColor(COLOR_GREEN)
+						self:EmitSound("buttons/combine_button1.wav")
+
+						timer.Simple(0.75, function()
+							if (!IsValid(self)) then return end
+
+							self:setUseAllowed(true)
+						end)
 					end)
-				end)
+				end
 			end
 		end)
 	end
@@ -176,46 +187,65 @@ else
 				return
 			end
 
-			self:SetUseAllowed(false)
+			self:setUseAllowed(false)
 			self:SetText("CHECKING")
 			self:SetDispColor(COLOR_BLUE)
 			self:EmitSound("ambient/machines/combine_terminal_idle2.wav")
 
 			timer.Simple(1, function()
-				if (!IsValid(self) or !IsValid(activator)) then return self:SetUseAllowed(true) end
+				if (!IsValid(self) or !IsValid(activator)) then return self:setUseAllowed(true) end
 
-				local itemTable = activator:GetItem("cid")
+				local found = false
+				local amount = 0
+				local item
 
-				if (!itemTable) then
-					return self:Error("INVALID ID")
-				else
-					if ((itemTable.data and itemTable.data.NextUse or 0) >= nut.util.GetUTCTime()) then
-						return self:Error("TRY LATER")
+				for k, v in pairs(activator:getChar():getInv():getItems()) do
+					if (v.uniqueID == "cid") then
+						found = true
+
+						if (v:getData("nextTime", 0) < os.time()) then
+							if (v:getData("cwu")) then
+								amount = 2
+							else
+								amount = 1
+							end
+
+							item = v
+
+							break
+						end
 					end
+				end
+
+				local item = activator:getChar():getInv():hasItem("cid")
+
+				if (!found) then
+					return self:error("INVALID ID")
+				elseif (found and amount == 0) then
+					return self:error("TRY LATER")
+				else
+					item:setData("nextTime", os.time() + 300)
 
 					self:SetText("ID OKAY")
 					self:EmitSound("buttons/button14.wav", 100, 50)
 
 					timer.Simple(1, function()
-						if (!IsValid(self) or !IsValid(activator)) then return self:SetUseAllowed(true) end
-						local itemTable = activator:GetItem("cid")
-
-						if (itemTable) then
-							itemTable.data = itemTable.data or {}
-							itemTable.data.NextUse = nut.util.GetUTCTime() + (nut.config.rationTime or 1800)
-							activator.character:Send("inv")
-							
-							self:Dispense()
-						else
-							self:Error("ERROR")
+						if (IsValid(self)) then
+							self:dispense(amount)
 						end
 					end)
 				end
 			end)
-		elseif (activator:IsCombine()) then
+		elseif (activator:isCombine()) then
 			self:SetDisabled(!self:GetDisabled())
 			self:EmitSound(self:GetDisabled() and "buttons/combine_button1.wav" or "buttons/combine_button2.wav")
 			self.nextUse = CurTime() + 1
+		end
+	end
+
+	function ENT:OnRemove()
+		if (!nut.shuttingDown) then
+			SCHEMA:saveDispensers()
 		end
 	end
 end
