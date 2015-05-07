@@ -56,15 +56,15 @@ SCHEMA.painSounds[FACTION_OW] = {
 }
 
 -- Civil Protection name prefix.
-SCHEMA.cpPrefix = "CP-"
+SCHEMA.cpPrefix = "UU-CCA:C17-"
 
 -- How long the Combine digits are.
 SCHEMA.digitsLen = 5
 
 -- Rank information.
 SCHEMA.rctRanks = {"RCT"}
-SCHEMA.unitRanks = {"05", "04", "03", "02", "01", "OfC"}
-SCHEMA.eliteRanks = {"EpU", "DvL", "SeC"}
+SCHEMA.unitRanks = {"05", "04", "03", "02", "01"}
+SCHEMA.eliteRanks = {"OfC", "EpU", "DvL", "SeC"}
 SCHEMA.scnRanks = {"SCN", "CLAW.SCN"}
 
 -- What model each rank should be.
@@ -81,6 +81,7 @@ SCHEMA.rankModels = {
 
 -- The default player data when using /data
 SCHEMA.defaultData = [[
-Points:
-Infractions:
+CID:
+Loyalist Points:
+Infraction Log (points and violation):
 ]]

@@ -269,7 +269,7 @@ nut.chat.register("request", {
 	end
 })
 
-nut.flag.add("y", "Access to the light blackmarket items.")
-nut.flag.add("Y", "Access to the heavy blackmarket items.")
+nut.flag.add("v", "Access to the light blackmarket items.")
+nut.flag.add("V", "Access to the heavy blackmarket items.")
 
 nut.currency.set("", "token", "tokens")
