@@ -91,7 +91,7 @@ do
 	end
 
 	function SCHEMA:isDispatch(client)
-		return client:isCombineRank(self.eliteRanks) or client:isCombineRank(self.scnRanks)
+		return client:isCombineRank(self.eliteRanks) or client:isCombineRank(self.scnRanks) or (self.Team() == FACTION_OW)
 	end
 
 	function playerMeta:getDigits()
