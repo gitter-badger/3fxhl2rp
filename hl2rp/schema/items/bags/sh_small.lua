@@ -1,6 +1,9 @@
 ITEM.name = "Small Bag"
 ITEM.desc = "A small bag that does not carry much."
-ITEM.invWidth = 2
+ITEM.width = 2
+ITEM.height = 1
+ITEM.invWidth = 3
 ITEM.invHeight = 2
 ITEM.permit = "misc"
+ITEM.price = 20
 ITEM.model = "models/props_c17/BriefCase001a.mdl"

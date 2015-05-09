@@ -25,5 +25,5 @@ ITEM.iconCam = {
 }
 ITEM.class = "weapon_crossbow"
 ITEM.weaponCategory = "primary"
-ITEM.price = 750
-ITEM.flag = "Y"
+ITEM.price = 1600
+ITEM.flag = "W"

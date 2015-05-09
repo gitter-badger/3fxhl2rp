@@ -110,6 +110,15 @@ do
 		end
 	end)
 
+	nut.flag.add("g", "Access to the gravgun.", function(client, isGiven)
+		if (isGiven) then
+			client:Give("weapon_physcannon")
+			client:SelectWeapon("weapon_physcannon")
+		else
+			client:StripWeapon("weapon_physcannon")
+		end
+	end)
+
 	nut.flag.add("t", "Access to the toolgun", function(client, isGiven)
 		if (isGiven) then
 			client:Give("gmod_tool")

@@ -20,5 +20,5 @@ ITEM.class = "weapon_frag"
 ITEM.weaponCategory = "grenade"
 ITEM.width = 1
 ITEM.height = 1
-ITEM.price = 250
-ITEM.flag = "Y"
+ITEM.price = 600
+ITEM.flag = "W"

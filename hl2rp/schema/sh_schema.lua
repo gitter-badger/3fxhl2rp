@@ -91,7 +91,7 @@ do
 	end
 
 	function SCHEMA:isDispatch(client)
-		return client:isCombineRank(self.eliteRanks) or client:isCombineRank(self.scnRanks) or (self.Team() == FACTION_OW)
+		return client:isCombineRank(self.eliteRanks) or client:isCombineRank(self.scnRanks)
 	end
 
 	function playerMeta:getDigits()
@@ -269,7 +269,7 @@ nut.chat.register("request", {
 	end
 })
 
-nut.flag.add("v", "Access to the light blackmarket items.")
-nut.flag.add("V", "Access to the heavy blackmarket items.")
+nut.flag.add("y", "Access to the light blackmarket items.")
+nut.flag.add("Y", "Access to the heavy blackmarket items.")
 
 nut.currency.set("", "token", "tokens")

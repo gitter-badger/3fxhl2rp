@@ -212,7 +212,7 @@ nut.chat.register("radio", {
 		local listenerEnts = ents.FindInSphere(listener:GetPos(), speakRange)
 		local listenerInv = listener:getChar():getInv()
 		local freq
-
+		
 		if (!CURFREQ or CURFREQ == "") then
 			return false
 		end
