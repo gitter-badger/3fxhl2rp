@@ -80,8 +80,7 @@ SCHEMA.rankModels = {
 }
 
 -- The default player data when using /data
-SCHEMA.defaultData = [[
-CID:
+SCHEMA.defaultData = [[CID:
 Loyalist Points:
 Infraction Log (points and violation):
 ]]
